@@ -1,1 +1,458 @@
 # Audit-Workflow
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audit Workflow Generator</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background: #f0f2f5; }
+.app { max-width: 1400px; margin: 0 auto; padding: 20px; }
+.header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 15px; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+.header h1 { font-size: 32px; margin-bottom: 10px; }
+.header p { opacity: 0.9; font-size: 16px; }
+.tabs { display: flex; gap: 10px; margin-bottom: 30px; background: white; padding: 10px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); flex-wrap: wrap; }
+.tab { padding: 12px 24px; border: none; background: transparent; cursor: pointer; border-radius: 8px; font-size: 15px; font-weight: 500; color: #555; transition: all 0.3s; }
+.tab:hover { background: #f0f2f5; }
+.tab.active { background: #667eea; color: white; }
+.content { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 2px 15px rgba(0,0,0,0.08); min-height: 500px; }
+.btn { padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 500; transition: all 0.3s; }
+.btn-primary { background: #667eea; color: white; }
+.btn-primary:hover { background: #5568d3; }
+.btn-secondary { background: #e0e7ff; color: #667eea; }
+.btn-danger { background: #ef4444; color: white; }
+.btn-warning { background: #f59e0b; color: white; }
+.btn-share { background: #10b981; color: white; }
+.workflow-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; margin-top: 20px; }
+.workflow-card { background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 20px; transition: all 0.3s; }
+.workflow-card:hover { border-color: #667eea; box-shadow: 0 8px 25px rgba(102,126,234,0.15); }
+.workflow-title { font-size: 18px; font-weight: 600; color: #1f2937; }
+.badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.badge-high { background: #fee2e2; color: #dc2626; }
+.badge-medium { background: #fef3c7; color: #d97706; }
+.badge-low { background: #dbeafe; color: #2563eb; }
+.badge-critical { background: #fce7f3; color: #db2777; }
+.form-group { margin-bottom: 20px; }
+.form-group label { display: block; margin-bottom: 8px; font-weight: 500; color: #374151; }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; }
+.task-item { background: #f9fafb; border-left: 4px solid #667eea; padding: 15px; margin-bottom: 10px; border-radius: 8px; }
+.template-card { background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 2px solid #bae6fd; padding: 25px; border-radius: 12px; cursor: pointer; transition: all 0.3s; }
+.template-card:hover { transform: translateY(-5px); box-shadow: 0 10px 30px rgba(102,126,234,0.2); }
+.progress-bar { background: #e5e7eb; height: 8px; border-radius: 10px; overflow: hidden; margin: 10px 0; }
+.progress-fill { background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); height: 100%; transition: width 0.3s; }
+.empty-state { text-align: center; padding: 60px 20px; color: #6b7280; }
+.button-group { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+</style>
+</head>
+<body>
+<div class="app">
+<div class="header">
+<h1>📋 Audit Workflow Generator</h1>
+<p>Create, manage, and share audit workflows securely.</p>
+</div>
+<div class="tabs" id="tabsContainer"></div>
+<div class="content" id="content"></div>
+</div>
+
+<script>
+const WorkflowApp = {
+  workflows: [],
+  currentTab: 'dashboard',
+  editingWorkflow: null,
+
+  init() {
+    this.loadData();
+    this.checkIncomingSharedWorkflow();
+    this.renderTabs();
+    this.showTab('dashboard');
+  },
+
+  loadData() {
+    const data = localStorage.getItem('auditWorkflows');
+    this.workflows = data ? JSON.parse(data) : [];
+  },
+
+  saveData() {
+    localStorage.setItem('auditWorkflows', JSON.stringify(this.workflows));
+  },
+
+  // NEW: Detects if someone opened a shared link
+  checkIncomingSharedWorkflow() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sharedData = urlParams.get('data');
+
+    if (sharedData) {
+      try {
+        // Decode the data from the URL
+        const decodedData = JSON.parse(decodeURIComponent(escape(atob(sharedData))));
+        
+        // Prevent duplicate IDs
+        const existingIdx = this.workflows.findIndex(w => w.id === decodedData.id);
+        if (existingIdx === -1) {
+          this.workflows.push(decodedData);
+          this.saveData();
+          alert(`Success! Imported Workflow: "${decodedData.name}"`);
+        } else {
+          alert(`Note: You already have the workflow "${decodedData.name}" in your list.`);
+        }
+        
+        // Clean URL after import
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch (e) {
+        console.error("Link Error: Could not decode workflow data.", e);
+      }
+    }
+  },
+
+  // NEW: Generates a shareable URL
+  shareWorkflow(id) {
+    const w = this.workflows.find(w => w.id === id);
+    if (!w) return;
+
+    // Compress and encode workflow object
+    const dataString = btoa(unescape(encodeURIComponent(JSON.stringify(w))));
+    const shareUrl = window.location.origin + window.location.pathname + '?data=' + dataString;
+
+    // Copy URL to clipboard
+    navigator.clipboard.writeText(shareUrl).then(() => {
+        alert('Shareable link copied to clipboard! Send this link to anyone to share this audit.');
+    }).catch(err => {
+        console.error('Clipboard error', err);
+        prompt('Copy this link to share:', shareUrl);
+    });
+  },
+
+  renderTabs() {
+    const tabs = ['Dashboard', 'Create', 'Templates', 'Archive', 'Export All'];
+    const container = document.getElementById('tabsContainer');
+    container.innerHTML = tabs.map(tab => 
+      `<button class="tab ${tab.toLowerCase() === this.currentTab ? 'active' : ''}" 
+        onclick="WorkflowApp.showTab('${tab.toLowerCase()}')">${tab}</button>`
+    ).join('');
+  },
+
+  showTab(tab) {
+    this.currentTab = tab;
+    this.renderTabs();
+    const content = document.getElementById('content');
+    
+    switch(tab) {
+      case 'dashboard': this.renderDashboard(content); break;
+      case 'create': this.renderCreateForm(content); break;
+      case 'templates': this.renderTemplates(content); break;
+      case 'archive': this.renderArchive(content); break;
+      case 'export all': this.exportAll(); break;
+    }
+  },
+
+  renderDashboard(el) {
+    const active = this.workflows.filter(w => !w.archived);
+    
+    if (active.length === 0) {
+      el.innerHTML = `
+        <div class="empty-state">
+          <h2 style="font-size: 48px; margin-bottom: 20px;">📊</h2>
+          <h2>No Active Workflows</h2>
+          <p>Get started by creating a workflow or using a template</p>
+          <button class="btn btn-primary" onclick="WorkflowApp.showTab('create')" style="margin-top: 20px;">Create Workflow</button>
+        </div>`;
+      return;
+    }
+
+    let html = '<h2 style="margin-bottom: 20px;">Active Workflows (' + active.length + ')</h2><div class="workflow-grid">';
+    
+    active.forEach(w => {
+      const progress = w.tasks.length ? Math.round((w.tasks.filter(t => t.status === 'Completed').length / w.tasks.length) * 100) : 0;
+      html += `
+        <div class="workflow-card">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+            <div>
+              <div class="workflow-title">${w.name}</div>
+              <div style="color: #6b7280; font-size: 14px; margin-top: 5px;">${w.clientName}</div>
+            </div>
+            <span class="badge badge-${w.riskLevel.toLowerCase()}">${w.riskLevel}</span>
+          </div>
+          <div style="margin: 15px 0;">
+            <div style="font-size: 13px; color: #6b7280; margin-bottom: 5px;">Progress: ${progress}%</div>
+            <div class="progress-bar"><div class="progress-fill" style="width: ${progress}%"></div></div>
+          </div>
+          <div style="color: #6b7280; font-size: 13px;">
+            <div>📅 ${w.startDate || 'No date'} → ${w.endDate || 'No date'}</div>
+            <div style="margin-top: 5px;">🏢 ${w.auditType} | ${w.tasks.length} tasks</div>
+          </div>
+          <div style="display: flex; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #e5e7eb; flex-wrap: wrap;">
+            <button class="btn btn-secondary" onclick='WorkflowApp.editWorkflow("${w.id}")' style="flex: 1; padding: 8px;">Edit</button>
+            <button class="btn btn-share" onclick='WorkflowApp.shareWorkflow("${w.id}")' style="flex: 1; padding: 8px;">Share Link</button>
+            <button class="btn btn-warning" onclick='WorkflowApp.archive("${w.id}")' style="flex: 1; padding: 8px;">Archive</button>
+          </div>
+        </div>`;
+    });
+    
+    el.innerHTML = html + '</div>';
+  },
+
+  renderCreateForm(el, workflow = null) {
+    this.editingWorkflow = workflow;
+    
+    el.innerHTML = `
+      <h2>${workflow ? 'Edit' : 'Create New'} Workflow</h2>
+      <form onsubmit="WorkflowApp.saveWorkflow(event)">
+        <div class="form-group">
+          <label>Workflow Name *</label>
+          <input type="text" id="name" value="${workflow?.name || ''}" required>
+        </div>
+        <div class="form-group">
+          <label>Client Name *</label>
+          <input type="text" id="client" value="${workflow?.clientName || ''}" required>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Audit Type *</label>
+            <select id="type" required>
+              <option value="">Select</option>
+              ${['Financial', 'Compliance', 'Operational', 'IT', 'Tax', 'Internal Controls'].map(t => 
+                `<option ${workflow?.auditType === t ? 'selected' : ''}>${t}</option>`
+              ).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Risk Level *</label>
+            <select id="risk" required>
+              ${['Low', 'Medium', 'High', 'Critical'].map(r => 
+                `<option ${workflow?.riskLevel === r ? 'selected' : ''}>${r}</option>`
+              ).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Start Date</label>
+            <input type="date" id="start" value="${workflow?.startDate || ''}">
+          </div>
+          <div class="form-group">
+            <label>End Date</label>
+            <input type="date" id="end" value="${workflow?.endDate || ''}">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="desc" rows="3">${workflow?.description || ''}</textarea>
+        </div>
+        <h3 style="margin: 30px 0 15px;">Tasks</h3>
+        <div id="tasksList"></div>
+        <button type="button" class="btn btn-secondary" onclick="WorkflowApp.addTaskField()">+ Add Task</button>
+        <div class="button-group">
+          <button type="submit" class="btn btn-primary">Save Workflow</button>
+          <button type="button" class="btn btn-secondary" onclick="WorkflowApp.showTab('dashboard')">Cancel</button>
+          ${workflow ? `<button type="button" class="btn btn-danger" onclick="WorkflowApp.deleteWorkflow('${workflow.id}')">Delete</button>` : ''}
+        </div>
+      </form>`;
+    
+    if (workflow?.tasks) {
+      workflow.tasks.forEach(t => this.addTaskField(t));
+    }
+  },
+
+  addTaskField(task = null) {
+    const container = document.getElementById('tasksList');
+    const idx = container.children.length;
+    const div = document.createElement('div');
+    div.className = 'task-item';
+    div.innerHTML = `
+      <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+        <strong>Task ${idx + 1}</strong>
+        <button type="button" onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; color: #ef4444; cursor: pointer;">✕</button>
+      </div>
+      <div class="form-group">
+        <label>Description *</label>
+        <input type="text" class="task-desc" value="${task?.description || ''}" required>
+      </div>
+      <div class="grid-3">
+        <div class="form-group">
+          <label>Due Date</label>
+          <input type="date" class="task-date" value="${task?.dueDate || ''}">
+        </div>
+        <div class="form-group">
+          <label>Priority</label>
+          <select class="task-priority">
+            ${['Low', 'Medium', 'High'].map(p => 
+              `<option ${task?.priority === p ? 'selected' : ''}>${p}</option>`
+            ).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select class="task-status">
+            ${['Not Started', 'In Progress', 'Completed', 'On Hold'].map(s => 
+              `<option ${task?.status === s ? 'selected' : ''}>${s}</option>`
+            ).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Assigned To</label>
+        <input type="text" class="task-assignee" value="${task?.assignedTo || ''}">
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <textarea class="task-notes" rows="2">${task?.notes || ''}</textarea>
+      </div>`;
+    container.appendChild(div);
+  },
+
+  saveWorkflow(e) {
+    e.preventDefault();
+    
+    const tasks = Array.from(document.querySelectorAll('.task-item')).map(t => ({
+      description: t.querySelector('.task-desc').value,
+      dueDate: t.querySelector('.task-date').value,
+      priority: t.querySelector('.task-priority').value,
+      status: t.querySelector('.task-status').value,
+      assignedTo: t.querySelector('.task-assignee').value,
+      notes: t.querySelector('.task-notes').value
+    }));
+    
+    const workflow = {
+      id: this.editingWorkflow?.id || Date.now().toString(),
+      name: document.getElementById('name').value,
+      clientName: document.getElementById('client').value,
+      auditType: document.getElementById('type').value,
+      riskLevel: document.getElementById('risk').value,
+      startDate: document.getElementById('start').value,
+      endDate: document.getElementById('end').value,
+      description: document.getElementById('desc').value,
+      tasks,
+      archived: this.editingWorkflow?.archived || false,
+      createdAt: this.editingWorkflow?.createdAt || new Date().toISOString()
+    };
+    
+    if (this.editingWorkflow) {
+      const idx = this.workflows.findIndex(w => w.id === workflow.id);
+      this.workflows[idx] = workflow;
+    } else {
+      this.workflows.push(workflow);
+    }
+    
+    this.saveData();
+    alert('✅ Workflow saved!');
+    this.showTab('dashboard');
+  },
+
+  editWorkflow(id) {
+    const w = this.workflows.find(w => w.id === id);
+    if (w) this.renderCreateForm(document.getElementById('content'), w);
+  },
+
+  deleteWorkflow(id) {
+    if (confirm('Delete this workflow?')) {
+      this.workflows = this.workflows.filter(w => w.id !== id);
+      this.saveData();
+      this.showTab('dashboard');
+    }
+  },
+
+  archive(id) {
+    const w = this.workflows.find(w => w.id === id);
+    if (w) {
+      w.archived = true;
+      this.saveData();
+      this.showTab('dashboard');
+    }
+  },
+
+  unarchive(id) {
+    const w = this.workflows.find(w => w.id === id);
+    if (w) {
+      w.archived = false;
+      this.saveData();
+      this.showTab('archive');
+    }
+  },
+
+  renderArchive(el) {
+    const archived = this.workflows.filter(w => w.archived);
+    
+    if (archived.length === 0) {
+      el.innerHTML = '<div class="empty-state"><h2>📦</h2><h2>No Archived Workflows</h2></div>';
+      return;
+    }
+    
+    el.innerHTML = '<h2>Archived Workflows</h2><div class="workflow-grid">' +
+      archived.map(w => `
+        <div class="workflow-card">
+          <h3>${w.name}</h3>
+          <p style="color: #6b7280;">${w.clientName}</p>
+          <button class="btn btn-primary" onclick="WorkflowApp.unarchive('${w.id}')" style="margin-top: 10px;">Restore</button>
+        </div>`
+      ).join('') + '</div>';
+  },
+
+  renderTemplates(el) {
+    const templates = [
+      { name: 'Year-End Financial Audit', type: 'Financial', risk: 'High', tasks: ['Review prior year files', 'Planning meeting', 'Analytical procedures', 'Test controls', 'Revenue testing', 'Inventory testing', 'Review estimates', 'Draft report'] },
+      { name: 'Internal Control Review', type: 'Internal Controls', risk: 'Medium', tasks: ['Document controls', 'Identify key controls', 'Test design', 'Test effectiveness', 'Document deficiencies', 'Present findings'] },
+      { name: 'Compliance Audit', type: 'Compliance', risk: 'High', tasks: ['Review regulations', 'Develop procedures', 'Test adherence', 'Review training', 'Identify issues', 'Prepare report'] },
+      { name: 'Operational Audit', type: 'Operational', risk: 'Medium', tasks: ['Map processes', 'Identify inefficiencies', 'Benchmark', 'Analyze resources', 'Develop recommendations', 'Create roadmap'] },
+      { name: 'IT Security Audit', type: 'IT', risk: 'Critical', tasks: ['Review policies', 'Assess network security', 'Test authentication', 'Review backups', 'Vulnerability assessment', 'Test incident response', 'Document gaps'] }
+    ];
+    
+    el.innerHTML = '<h2>Workflow Templates</h2><div class="workflow-grid">' +
+      templates.map((t, i) => `
+        <div class="template-card" onclick="WorkflowApp.useTemplate(${i})">
+          <h3 style="margin-bottom: 10px;">${t.name}</h3>
+          <div style="margin: 10px 0;">
+            <span class="badge badge-${t.risk.toLowerCase()}">${t.risk}</span>
+            <span style="margin-left: 10px; color: #6b7280;">${t.tasks.length} tasks</span>
+          </div>
+          <button class="btn btn-primary" style="width: 100%; margin-top: 10px;">Use Template</button>
+        </div>`
+      ).join('') + '</div>';
+  },
+
+  useTemplate(idx) {
+    const templates = [
+      { name: 'Year-End Financial Audit', type: 'Financial', risk: 'High', tasks: ['Review prior year files', 'Planning meeting', 'Analytical procedures', 'Test controls', 'Revenue testing', 'Inventory testing', 'Review estimates', 'Draft report'] },
+      { name: 'Internal Control Review', type: 'Internal Controls', risk: 'Medium', tasks: ['Document controls', 'Identify key controls', 'Test design', 'Test effectiveness', 'Document deficiencies', 'Present findings'] },
+      { name: 'Compliance Audit', type: 'Compliance', risk: 'High', tasks: ['Review regulations', 'Develop procedures', 'Test adherence', 'Review training', 'Identify issues', 'Prepare report'] },
+      { name: 'Operational Audit', type: 'Operational', risk: 'Medium', tasks: ['Map processes', 'Identify inefficiencies', 'Benchmark', 'Analyze resources', 'Develop recommendations', 'Create roadmap'] },
+      { name: 'IT Security Audit', type: 'IT', risk: 'Critical', tasks: ['Review policies', 'Assess network security', 'Test authentication', 'Review backups', 'Vulnerability assessment', 'Test incident response', 'Document gaps'] }
+    ];
+    
+    const t = templates[idx];
+    const w = {
+      name: t.name,
+      clientName: '',
+      auditType: t.type,
+      riskLevel: t.risk,
+      startDate: '',
+      endDate: '',
+      description: '',
+      tasks: t.tasks.map(desc => ({ description: desc, dueDate: '', priority: 'Medium', status: 'Not Started', assignedTo: '', notes: '' }))
+    };
+    
+    this.renderCreateForm(document.getElementById('content'), w);
+  },
+
+  exportAll() {
+    if (this.workflows.length === 0) {
+      alert('No workflows to export');
+      return;
+    }
+    
+    const data = JSON.stringify(this.workflows, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `audit_workflows_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    alert('All workflows exported!');
+  }
+};
+
+WorkflowApp.init();
+</script>
+</body>
+</html>
